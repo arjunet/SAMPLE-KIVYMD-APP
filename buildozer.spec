@@ -1,13 +1,13 @@
 [app]
 
 # (str) Title of your application
-title = SampleApp
+title = Galaxy Viewer
 
 # (str) Package name
-package.name = nfsApk
+package.name = arjunits
 
 # (str) Package domain (needed for android/ios packaging)
-package.domain = org.novfensec
+package.domain = org.arjune
 
 # (str) Source code where the main.py live
 source.dir = .
@@ -37,17 +37,17 @@ version = 0.1
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy==2.3.0,kivymd==1.1.1,pillow==10.3.0
+requirements = python3,kivy,sdl2_ttf,pillow,kivy-garden,random,python-vlc,time,kivymd,
 
 # (str) Custom source folders for requirements
 # Sets custom source for any requirements with recipes
 # requirements.source.kivy = ../../kivy
 
 # (str) Presplash of the application
-presplash.filename = %(source.dir)s/images/presplash.png
+presplash.filename = %(source.dir)s/images/icon.png
 
 # (str) Icon of the application
-icon.filename = %(source.dir)s/images/favicon.png
+icon.filename = %(source.dir)s/images/icon.png
 
 # (list) Supported orientations
 # Valid options are: landscape, portrait, portrait-reverse or landscape-reverse
@@ -283,7 +283,7 @@ fullscreen = 0
 
 # (list) The Android archs to build for, choices: armeabi-v7a, arm64-v8a, x86, x86_64
 # In past, was `android.arch` as we weren't supporting builds for multiple archs at the same time.
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = armeabi-v7a, arm64-v8a, x86, x86_64
 
 # (int) overrides automatic versionCode computation (used in build.gradle)
 # this is not the same as app version and should only be edited if you know what you're doing
