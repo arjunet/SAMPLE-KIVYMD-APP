@@ -1,19 +1,248 @@
-from kivymd.app import MDApp
-from kivy.lang import Builder
+import random
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.label import Label
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.textinput import TextInput
+from kivy.uix.button import Button
+import vlc
+import time
+from kivy.uix.popup import Popup
+from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.graphics import Rectangle, Color
+from kivy.animation import Animation
+from kivy.clock import Clock
 
-class SampleApp(MDApp):
-    
+
+class ImageButton(Button):
+    def __init__(self, source, **kwargs):
+        super().__init__(**kwargs)
+        self.source = source
+        self.background_normal = ''
+        self.background_color = (1, 1, 1, 0)
+        self.color = kwargs.get('color', (1, 1, 1, 1))  # Use provided color
+        self.bind(pos=self.update_rect, size=self.update_rect)
+        with self.canvas.before:
+            self.rect = Rectangle(source=self.source, pos=self.pos, size=self.size)
+
+    def update_rect(self, *args):
+        self.rect.pos = self.pos
+        self.rect.size = self.size
+
+
+class Setup(Screen):
+    def __init__(self, **kwargs):
+        super(Setup, self).__init__(**kwargs)
+        layout = GridLayout(cols=2)
+        layout.add_widget(Label(text="Please enter your name here --->"))
+        self.name_input = TextInput(multiline=False)
+        layout.add_widget(self.name_input)
+        self.twoFA_code = random.randint(100000, 999999)
+        layout.add_widget(Label(
+            text=f"Enter this code to prove you're not a robot. Once you're done, press the save button. ---> {self.twoFA_code}"))
+        self.code_input = TextInput(multiline=False)
+        layout.add_widget(self.code_input)
+        self.submit = Button(text="Save")
+        self.submit.bind(on_press=self.pressed)
+        layout.add_widget(self.submit)
+        self.add_widget(layout)
+
+    def pressed(self, instance):
+        name = self.name_input.text
+        user_code = self.code_input.text
+        with open("User_data.txt", "w") as file:
+            file.write(name)
+        try:
+            user_code = int(user_code)
+        except ValueError:
+            self.show_popup("Error", "Invalid input. Please enter numbers only.")
+            return
+        if user_code == self.twoFA_code:
+            self.show_popup("Success", "Saved Successfully!")
+            self.manager.current = 'image_button'
+        else:
+            self.show_popup("Error", "Incorrect code. Please try again.")
+
+    def show_popup(self, title, message):
+        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        label = Label(text=message)
+        close_button = Button(text="OK", size_hint=(1, 0.5))
+        content.add_widget(label)
+        content.add_widget(close_button)
+        popup = Popup(title=title, content=content, size_hint=(0.6, 0.4), auto_dismiss=False)
+        close_button.bind(on_release=popup.dismiss)
+        popup.open()
+
+
+class ImageButtonScreen(Screen):
+    def __init__(self, **kwargs):
+        super(ImageButtonScreen, self).__init__(**kwargs)
+        main_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
+
+        mode_row = BoxLayout(orientation='horizontal', spacing=10)
+
+        modes = [
+            ('Galaxy Mode', 'nebula.jpg'),
+            ('Rainy Mode', 'rain.jpg'),
+            ('Sunny Mode', 'sunny.jpg'),
+            ('Western Mode', 'west.jpg')
+        ]
+
+        for text, source in modes:
+            btn = ImageButton(
+                source=source,
+                text=text,
+                font_size=40,  # Font size 40
+                bold=True,  # Bold text
+                color=(0, 0, 0, 1),  # Black color
+                size_hint=(1, 1)
+            )
+            btn.bind(on_press=self.set_background_and_transition)
+            mode_row.add_widget(btn)
+
+        main_layout.add_widget(mode_row)
+        self.add_widget(main_layout)
+
+    def on_enter(self):
+        self.show_theme_popup()
+
+    def show_theme_popup(self):
+        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        message_label = Label(text="Please select a theme below")
+        close_button = Button(text="OK", size_hint=(1, 0.5))
+        content.add_widget(message_label)
+        content.add_widget(close_button)
+
+        popup = Popup(title="Theme",
+                      content=content,
+                      size_hint=(0.6, 0.4),
+                      auto_dismiss=False)
+        close_button.bind(on_release=popup.dismiss)
+        popup.open()
+
+    def set_background_and_transition(self, instance):
+        MyGrid.background_image = instance.source
+        self.manager.current = 'grid'
+
+
+class MyGrid(Screen):
+    background_image = None
+
+    def __init__(self, **kwargs):
+        super(MyGrid, self).__init__(**kwargs)
+        self.layout = GridLayout(cols=2)
+        with self.layout.canvas.before:
+            self.bg = Rectangle(source=self.background_image if self.background_image else '',
+                                pos=self.layout.pos, size=self.layout.size)
+        self.layout.bind(pos=self.update_bg, size=self.update_bg)
+
+        button_style = {
+            'font_size': 60,
+            'color': [0, 0, 0, 1],
+            'background_color': (0, 0, 0, 0),
+            'background_normal': '',
+            'bold': True
+        }
+
+        self.Florida_ABC = Button(text="Florida ABC", **button_style)
+        self.Florida_ABC.bind(on_press=self.button_pressed)
+        self.layout.add_widget(self.Florida_ABC)
+
+        self.Florida_CBS = Button(text="Florida CBS", **button_style)
+        self.Florida_CBS.bind(on_press=self.button_pressed)
+        self.layout.add_widget(self.Florida_CBS)
+
+        self.NewYork_ABC = Button(text="New York ABC", **button_style)
+        self.NewYork_ABC.bind(on_press=self.button_pressed)
+        self.layout.add_widget(self.NewYork_ABC)
+
+        self.NewYork_CBS = Button(text="New York CBS", **button_style)
+        self.NewYork_CBS.bind(on_press=self.button_pressed)
+        self.layout.add_widget(self.NewYork_CBS)
+
+        self.add_widget(self.layout)
+
+    def update_bg(self, *args):
+        if hasattr(self, 'bg'):
+            self.bg.pos = self.layout.pos
+            self.bg.size = self.layout.size
+            self.bg.source = self.background_image if self.background_image else ''
+
+    def button_pressed(self, instance):
+        anim = Animation(color=[1, 0, 0, 1], duration=0.5) + Animation(color=[0, 0, 0, 1], duration=0.5)
+        anim.repeat = True
+        anim.start(instance)
+        Clock.schedule_once(lambda dt: self.stop_animation_and_call(instance), 3)
+
+    def stop_animation_and_call(self, instance):
+        Animation.cancel_all(instance)
+        instance.color = [0, 0, 0, 1]
+        if instance == self.Florida_ABC:
+            self.FLABCCALL(instance)
+        elif instance == self.Florida_CBS:
+            self.FLCBSCALL(instance)
+        elif instance == self.NewYork_ABC:
+            self.NYABCCALL(instance)
+        elif instance == self.NewYork_CBS:
+            self.NYCBSCALL(instance)
+
+    def FLABCCALL(self, instance):
+        m3u8_url = "https://apollo.production-public.tubi.io/live/ac-wftv.m3u8"
+        self.play_stream(m3u8_url)
+
+    def FLCBSCALL(self, instance):
+        m3u8_url = "https://video.tegnaone.com/wtsp/live/v1/master/f9c1bf9ffd6ac86b6173a7c169ff6e3f4efbd693/WTSP-Production/live/index.m3u8?checkedby:iptvcat.com"
+        self.play_stream(m3u8_url)
+
+    def NYABCCALL(self, instance):
+        m3u8_url = "https://content.uplynk.com/ext/72750b711f704e4a94b5cfe6dc99f5e1/080421-wabc-ctv-eveningupdate-vid.m3u8"
+        self.play_stream(m3u8_url)
+
+    def NYCBSCALL(self, instance):
+        m3u8_url = "https://content.uplynk.com/channel/ext/72750b711f704e4a94b5cfe6dc99f5e1/wabc_24x7_news.m3u8"
+        self.play_stream(m3u8_url)
+
+    def play_stream(self, url):
+        if url is None or not isinstance(url, str):
+            try:
+                url = str(url)
+            except Exception as e:
+                raise ValueError("The URL must be a string or convertible to a string.") from e
+        instance = vlc.Instance()
+        player = instance.media_player_new()
+        media = instance.media_new(url)
+        player.set_media(media)
+        player.set_fullscreen(True)
+        player.play()
+        print("Playing... Press Ctrl+C to stop.")
+        try:
+            while True:
+                state = player.get_state()
+                if state in [vlc.State.Ended, vlc.State.Error]:
+                    print("Playback finished or encountered an error.")
+                    break
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("Playback stopped by user.")
+            player.stop()
+
+
+class MyApp(App):
     def build(self):
-        self.appKv='''
-MDScreen:
-    MDLabel:
-        text:'Hello,World.'
-        multiline:True
-        color:"blue"
-        halign:'center'         
-'''
-        AppScreen=Builder.load_string(self.appKv)
-        return AppScreen
+        sm = ScreenManager()
+        sm.add_widget(Setup(name='setup'))
+        sm.add_widget(ImageButtonScreen(name='image_button'))
+        sm.add_widget(MyGrid(name='grid'))
+        try:
+            with open("User_data.txt", "r") as file:
+                if file.read().strip():
+                    sm.current = 'image_button'
+                else:
+                    sm.current = 'setup'
+        except FileNotFoundError:
+            sm.current = 'setup'
+        return sm
 
-SampleApp().run()
-    
+
+if __name__ == "__main__":
+    MyApp().run()
