@@ -1,9 +1,12 @@
 # MUST BE AT VERY TOP
 from kivy.config import Config
-
 Config.set('kivy', 'video', 'ffpyplayer')
+Config.set('kivy', 'log_enable', '1')
+Config.set('kivy', 'log_level', 'debug')
 
 import random
+import os
+import traceback
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
@@ -13,9 +16,9 @@ from kivy.uix.button import Button
 from kivy.uix.video import Video
 from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import ScreenManager, Screen
-from kivy.graphics import Rectangle, Color
+from kivy.graphics import Rectangle
 from kivy.animation import Animation
-from kivy.clock import Clock
+from kivy.clock import Clock, mainthread
 
 
 class ImageButton(Button):
@@ -133,120 +136,115 @@ class MyGrid(Screen):
     background_image = None
 
     def __init__(self, **kwargs):
-        super(MyGrid, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.layout = GridLayout(cols=2)
-        with self.layout.canvas.before:
-            self.bg = Rectangle(source=self.background_image if self.background_image else '',
-                                pos=self.layout.pos, size=self.layout.size)
-        self.layout.bind(pos=self.update_bg, size=self.update_bg)
-
-        button_style = {
-            'font_size': 60,
-            'color': [0, 0, 0, 1],
-            'background_color': (0, 0, 0, 0),
-            'background_normal': '',
-            'bold': True
-        }
-
-        self.Florida_ABC = Button(text="Florida ABC", **button_style)
-        self.Florida_ABC.bind(on_press=self.button_pressed)
-        self.layout.add_widget(self.Florida_ABC)
-
-        self.Florida_CBS = Button(text="Florida CBS", **button_style)
-        self.Florida_CBS.bind(on_press=self.button_pressed)
-        self.layout.add_widget(self.Florida_CBS)
-
-        self.NewYork_ABC = Button(text="New York ABC", **button_style)
-        self.NewYork_ABC.bind(on_press=self.button_pressed)
-        self.layout.add_widget(self.NewYork_ABC)
-
-        self.NewYork_CBS = Button(text="New York CBS", **button_style)
-        self.NewYork_CBS.bind(on_press=self.button_pressed)
-        self.layout.add_widget(self.NewYork_CBS)
-
         self.video_popup = None
+
+        # Channel buttons
+        channels = [
+            "Florida ABC", "Florida CBS",
+            "New York ABC", "New York CBS"
+        ]
+
+        for channel in channels:
+            btn = Button(text=channel, font_size=60,
+                         background_color=(0, 0, 0, 0),
+                         color=(0, 0, 0, 1),
+                         bold=True)
+
+
+
+            btn.bind(on_press=self.play_channel)
+            self.layout.add_widget(btn)
+
         self.add_widget(self.layout)
 
-    def update_bg(self, *args):
-        if hasattr(self, 'bg'):
-            self.bg.pos = self.layout.pos
-            self.bg.size = self.layout.size
-            self.bg.source = self.background_image if self.background_image else ''
+    def on_pre_enter(self):
+        with self.layout.canvas.before:
+            self.bg = Rectangle(source=self.background_image or '',
+                                size=self.layout.size, pos=self.layout.pos)
+        self.layout.bind(pos=self.update_bg, size=self.update_bg)
 
-    def button_pressed(self, instance):
-        anim = Animation(color=[1, 0, 0, 1], duration=0.5) + Animation(color=[0, 0, 0, 1], duration=0.5)
+    def update_bg(self, *args):
+        self.bg.pos = self.layout.pos
+        self.bg.size = self.layout.size
+
+    def play_channel(self, instance):
+        anim = (Animation(color=(1, 0, 0, 1), duration=0.5) +
+                Animation(color=(0, 0, 0, 1), duration=0.5))
         anim.repeat = True
         anim.start(instance)
-        Clock.schedule_once(lambda dt: self.stop_animation_and_call(instance), 3)
+        Clock.schedule_once(lambda dt: self.start_stream(instance), 2)
 
-    def stop_animation_and_call(self, instance):
+    def start_stream(self, instance):
         Animation.cancel_all(instance)
-        instance.color = [0, 0, 0, 1]
-        if instance == self.Florida_ABC:
-            self.FLABCCALL(instance)
-        elif instance == self.Florida_CBS:
-            self.FLCBSCALL(instance)
-        elif instance == self.NewYork_ABC:
-            self.NYABCCALL(instance)
-        elif instance == self.NewYork_CBS:
-            self.NYCBSCALL(instance)
+        instance.color = (0, 0, 0, 1)
 
+        streams = {
+            "Florida ABC": "https://apollo.production-public.tubi.io/live/ac-wftv.m3u8",
+            "Florida CBS": "https://video.tegnaone.com/wtsp/live/v1/master/f9c1bf9ffd6ac86b6173a7c169ff6e3f4efbd693/WTSP-Production/live/index.m3u8",
+            "New York ABC": "https://content.uplynk.com/ext/72750b711f704e4a94b5cfe6dc99f5e1/080421-wabc-ctv-eveningupdate-vid.m3u8",
+            "New York CBS": "https://content.uplynk.com/channel/ext/72750b711f704e4a94b5cfe6dc99f5e1/wabc_24x7_news.m3u8"
+        }
+
+        self.play_stream(streams[instance.text])
+
+    @mainthread
     def play_stream(self, url):
-        # Close existing popup
-        if self.video_popup:
-            self.video_popup.dismiss()
-
         try:
-            # Create video widget with valid properties
+            # Cleanup previous instances
+            if self.video_popup:
+                self.video_popup.dismiss()
+                self.video_popup = None
+
+            # Create video widget
             video = Video(
                 source=url,
                 state='play',
                 options={'eos': 'loop'},
-                size_hint=(1, 1),
                 allow_stretch=True
             )
 
-            # Create fullscreen container
-            box = BoxLayout()
-            box.add_widget(video)
+            # Android-friendly fullscreen implementation
+            content = BoxLayout()
+            content.add_widget(video)
 
             # Add close button
             close_btn = Button(
                 text='X',
                 size_hint=(None, None),
                 size=(50, 50),
-                pos_hint={'right': 0.95, 'top': 0.95}
+                pos_hint={'right': 0.95, 'top': 0.95},
+                background_color=(1, 0, 0, 1)
             )
 
-            # Create popup
             self.video_popup = Popup(
                 title='',
-                content=box,
+                content=content,
                 size_hint=(1, 1),
-                auto_dismiss=False
+                auto_dismiss=False,
+                separator_height=0
             )
 
             close_btn.bind(on_release=self.video_popup.dismiss)
-            box.add_widget(close_btn)
+            content.add_widget(close_btn)
 
+            # Start video after popup opens
             self.video_popup.open()
 
         except Exception as e:
-            print(f"Error playing stream: {e}")
+            error_msg = f"ANDROID ERROR: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            # Write to external storage for debugging
+            from android.permissions import request_permissions, Permission
+            request_permissions([Permission.WRITE_EXTERNAL_STORAGE])
 
-    def FLABCCALL(self, instance):
-        self.play_stream("https://apollo.production-public.tubi.io/live/ac-wftv.m3u8")
+            log_dir = "/sdcard/stream_app_logs"
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
 
-    def FLCBSCALL(self, instance):
-        self.play_stream(
-            "https://video.tegnaone.com/wtsp/live/v1/master/f9c1bf9ffd6ac86b6173a7c169ff6e3f4efbd693/WTSP-Production/live/index.m3u8?checkedby:iptvcat.com")
-
-    def NYABCCALL(self, instance):
-        self.play_stream(
-            "https://content.uplynk.com/ext/72750b711f704e4a94b5cfe6dc99f5e1/080421-wabc-ctv-eveningupdate-vid.m3u8")
-
-    def NYCBSCALL(self, instance):
-        self.play_stream("https://content.uplynk.com/channel/ext/72750b711f704e4a94b5cfe6dc99f5e1/wabc_24x7_news.m3u8")
+            with open(os.path.join(log_dir, "error.log"), "a") as f:
+                f.write(error_msg + "\n")
 
 
 class MyApp(App):
