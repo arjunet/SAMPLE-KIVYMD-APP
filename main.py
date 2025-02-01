@@ -1,11 +1,12 @@
 import random
+import subprocess
+import threading
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
-import vlc
 import time
 from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import ScreenManager, Screen
@@ -20,7 +21,7 @@ class ImageButton(Button):
         self.source = source
         self.background_normal = ''
         self.background_color = (1, 1, 1, 0)
-        self.color = kwargs.get('color', (1, 1, 1, 1))  # Use provided color
+        self.color = kwargs.get('color', (1, 1, 1, 1))
         self.bind(pos=self.update_rect, size=self.update_rect)
         with self.canvas.before:
             self.rect = Rectangle(source=self.source, pos=self.pos, size=self.size)
@@ -92,9 +93,9 @@ class ImageButtonScreen(Screen):
             btn = ImageButton(
                 source=source,
                 text=text,
-                font_size=40,  # Font size 40
-                bold=True,  # Bold text
-                color=(0, 0, 0, 1),  # Black color
+                font_size=40,
+                bold=True,
+                color=(0, 0, 0, 1),
                 size_hint=(1, 1)
             )
             btn.bind(on_press=self.set_background_and_transition)
@@ -186,6 +187,23 @@ class MyGrid(Screen):
         elif instance == self.NewYork_CBS:
             self.NYCBSCALL(instance)
 
+    def play_stream(self, url):
+        def run_ffplay():
+            try:
+                subprocess.run(
+                    ['ffplay', '-fs', '-autoexit', url],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+            except subprocess.CalledProcessError as e:
+                print(f"Error playing stream: {e}")
+            except Exception as e:
+                print(f"Unexpected error: {e}")
+
+        thread = threading.Thread(target=run_ffplay, daemon=True)
+        thread.start()
+
     def FLABCCALL(self, instance):
         m3u8_url = "https://apollo.production-public.tubi.io/live/ac-wftv.m3u8"
         self.play_stream(m3u8_url)
@@ -201,30 +219,6 @@ class MyGrid(Screen):
     def NYCBSCALL(self, instance):
         m3u8_url = "https://content.uplynk.com/channel/ext/72750b711f704e4a94b5cfe6dc99f5e1/wabc_24x7_news.m3u8"
         self.play_stream(m3u8_url)
-
-    def play_stream(self, url):
-        if url is None or not isinstance(url, str):
-            try:
-                url = str(url)
-            except Exception as e:
-                raise ValueError("The URL must be a string or convertible to a string.") from e
-        instance = vlc.Instance()
-        player = instance.media_player_new()
-        media = instance.media_new(url)
-        player.set_media(media)
-        player.set_fullscreen(True)
-        player.play()
-        print("Playing... Press Ctrl+C to stop.")
-        try:
-            while True:
-                state = player.get_state()
-                if state in [vlc.State.Ended, vlc.State.Error]:
-                    print("Playback finished or encountered an error.")
-                    break
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("Playback stopped by user.")
-            player.stop()
 
 
 class MyApp(App):
