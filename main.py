@@ -13,6 +13,7 @@ from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.graphics import Rectangle, Color
 from kivy.animation import Animation
 from kivy.clock import Clock
+import ffmpeg  # FFmpeg Python bindings
 
 
 class ImageButton(Button):
@@ -188,20 +189,20 @@ class MyGrid(Screen):
             self.NYCBSCALL(instance)
 
     def play_stream(self, url):
-        def run_ffplay():
+        def run_ffmpeg():
             try:
-                subprocess.run(
-                    ['ffplay', '-fs', '-autoexit', url],
-                    check=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
+                # Use FFmpeg to stream the video
+                (
+                    ffmpeg
+                    .input(url)
+                    .output('pipe:', format='rawvideo', pix_fmt='rgb24')
+                    .run_async(pipe_stdout=True)
                 )
-            except subprocess.CalledProcessError as e:
-                print(f"Error playing stream: {e}")
             except Exception as e:
-                print(f"Unexpected error: {e}")
+                print(f"Error playing stream: {e}")
 
-        thread = threading.Thread(target=run_ffplay, daemon=True)
+        # Start FFmpeg in a separate thread
+        thread = threading.Thread(target=run_ffmpeg, daemon=True)
         thread.start()
 
     def FLABCCALL(self, instance):
