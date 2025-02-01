@@ -43,7 +43,7 @@ class Setup(Screen):
         layout.add_widget(self.name_input)
         self.twoFA_code = random.randint(100000, 999999)
         layout.add_widget(Label(
-            text=f"Enter this code to prove you're not a robot. Once you're done, press the save button. ---> {self.twoFA_code}"))
+            text=f"Type in the code ---> {self.twoFA_code}"))
         self.code_input = TextInput(multiline=False)
         layout.add_widget(self.code_input)
         self.submit = Button(text="Save")
