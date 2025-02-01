@@ -1,19 +1,21 @@
+# MUST BE AT VERY TOP
+from kivy.config import Config
+
+Config.set('kivy', 'video', 'ffpyplayer')
+
 import random
-import subprocess
-import threading
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
-import time
+from kivy.uix.video import Video
 from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.graphics import Rectangle, Color
 from kivy.animation import Animation
 from kivy.clock import Clock
-import ffmpeg  # FFmpeg Python bindings
 
 
 class ImageButton(Button):
@@ -162,6 +164,7 @@ class MyGrid(Screen):
         self.NewYork_CBS.bind(on_press=self.button_pressed)
         self.layout.add_widget(self.NewYork_CBS)
 
+        self.video_popup = None
         self.add_widget(self.layout)
 
     def update_bg(self, *args):
@@ -189,37 +192,61 @@ class MyGrid(Screen):
             self.NYCBSCALL(instance)
 
     def play_stream(self, url):
-        def run_ffmpeg():
-            try:
-                # Use FFmpeg to stream the video
-                (
-                    ffmpeg
-                    .input(url)
-                    .output('pipe:', format='rawvideo', pix_fmt='rgb24')
-                    .run_async(pipe_stdout=True)
-                )
-            except Exception as e:
-                print(f"Error playing stream: {e}")
+        # Close existing popup
+        if self.video_popup:
+            self.video_popup.dismiss()
 
-        # Start FFmpeg in a separate thread
-        thread = threading.Thread(target=run_ffmpeg, daemon=True)
-        thread.start()
+        try:
+            # Create video widget with valid properties
+            video = Video(
+                source=url,
+                state='play',
+                options={'eos': 'loop'},
+                size_hint=(1, 1),
+                allow_stretch=True
+            )
+
+            # Create fullscreen container
+            box = BoxLayout()
+            box.add_widget(video)
+
+            # Add close button
+            close_btn = Button(
+                text='X',
+                size_hint=(None, None),
+                size=(50, 50),
+                pos_hint={'right': 0.95, 'top': 0.95}
+            )
+
+            # Create popup
+            self.video_popup = Popup(
+                title='',
+                content=box,
+                size_hint=(1, 1),
+                auto_dismiss=False
+            )
+
+            close_btn.bind(on_release=self.video_popup.dismiss)
+            box.add_widget(close_btn)
+
+            self.video_popup.open()
+
+        except Exception as e:
+            print(f"Error playing stream: {e}")
 
     def FLABCCALL(self, instance):
-        m3u8_url = "https://apollo.production-public.tubi.io/live/ac-wftv.m3u8"
-        self.play_stream(m3u8_url)
+        self.play_stream("https://apollo.production-public.tubi.io/live/ac-wftv.m3u8")
 
     def FLCBSCALL(self, instance):
-        m3u8_url = "https://video.tegnaone.com/wtsp/live/v1/master/f9c1bf9ffd6ac86b6173a7c169ff6e3f4efbd693/WTSP-Production/live/index.m3u8?checkedby:iptvcat.com"
-        self.play_stream(m3u8_url)
+        self.play_stream(
+            "https://video.tegnaone.com/wtsp/live/v1/master/f9c1bf9ffd6ac86b6173a7c169ff6e3f4efbd693/WTSP-Production/live/index.m3u8?checkedby:iptvcat.com")
 
     def NYABCCALL(self, instance):
-        m3u8_url = "https://content.uplynk.com/ext/72750b711f704e4a94b5cfe6dc99f5e1/080421-wabc-ctv-eveningupdate-vid.m3u8"
-        self.play_stream(m3u8_url)
+        self.play_stream(
+            "https://content.uplynk.com/ext/72750b711f704e4a94b5cfe6dc99f5e1/080421-wabc-ctv-eveningupdate-vid.m3u8")
 
     def NYCBSCALL(self, instance):
-        m3u8_url = "https://content.uplynk.com/channel/ext/72750b711f704e4a94b5cfe6dc99f5e1/wabc_24x7_news.m3u8"
-        self.play_stream(m3u8_url)
+        self.play_stream("https://content.uplynk.com/channel/ext/72750b711f704e4a94b5cfe6dc99f5e1/wabc_24x7_news.m3u8")
 
 
 class MyApp(App):
