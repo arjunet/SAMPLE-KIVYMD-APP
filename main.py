@@ -20,6 +20,9 @@ from kivy.graphics import Rectangle
 from kivy.animation import Animation
 from kivy.clock import Clock, mainthread
 
+# NEW: Import Pyjnius to access Android native classes.
+from jnius import autoclass
+
 
 class ImageButton(Button):
     def __init__(self, source, **kwargs):
@@ -115,7 +118,7 @@ class ImageButtonScreen(Screen):
 
     def show_theme_popup(self):
         content = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        message_label = Label(text="Please select a theme below")
+        message_label = Label(text="Please select a theme below to proceed:")
         close_button = Button(text="OK", size_hint=(1, 0.5))
         content.add_widget(message_label)
         content.add_widget(close_button)
@@ -151,9 +154,6 @@ class MyGrid(Screen):
                          background_color=(0, 0, 0, 0),
                          color=(0, 0, 0, 1),
                          bold=True)
-
-
-
             btn.bind(on_press=self.play_channel)
             self.layout.add_widget(btn)
 
@@ -197,19 +197,28 @@ class MyGrid(Screen):
                 self.video_popup.dismiss()
                 self.video_popup = None
 
-            # Create video widget
-            video = Video(
-                source=url,
-                state='play',
-                options={'eos': 'loop'},
-                allow_stretch=True
-            )
+            # --- BEGIN MODIFICATION: Use Android's native VideoView ---
+            # Access native Android classes
+            VideoView = autoclass('android.widget.VideoView')
+            Uri = autoclass('android.net.Uri')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            activity = PythonActivity.mActivity
 
-            # Android-friendly fullscreen implementation
+            # Create the native VideoView and set it up
+            native_video = VideoView(activity)
+            video_uri = Uri.parse(url)
+            native_video.setVideoURI(video_uri)
+            native_video.requestFocus()
+            native_video.start()
+
+            # Add the native VideoView to the activity's view hierarchy in full screen
+            LayoutParams = autoclass('android.view.ViewGroup$LayoutParams')
+            params = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+            activity.addContentView(native_video, params)
+            # --- END MODIFICATION ---
+
+            # Create an overlay popup with a close button to dismiss the native player
             content = BoxLayout()
-            content.add_widget(video)
-
-            # Add close button
             close_btn = Button(
                 text='X',
                 size_hint=(None, None),
@@ -217,7 +226,6 @@ class MyGrid(Screen):
                 pos_hint={'right': 0.95, 'top': 0.95},
                 background_color=(1, 0, 0, 1)
             )
-
             self.video_popup = Popup(
                 title='',
                 content=content,
@@ -225,11 +233,8 @@ class MyGrid(Screen):
                 auto_dismiss=False,
                 separator_height=0
             )
-
-            close_btn.bind(on_release=self.video_popup.dismiss)
             content.add_widget(close_btn)
-
-            # Start video after popup opens
+            close_btn.bind(on_release=lambda *args: self.close_native_video(native_video))
             self.video_popup.open()
 
         except Exception as e:
@@ -237,30 +242,39 @@ class MyGrid(Screen):
             print(error_msg)
             # Write to external storage for debugging
             from android.permissions import request_permissions, Permission
-            request_permissions([Permission.WRITE_EXTERNAL_STORAGE])
-
+            request_permissions([Permission.WRITE_EXTERNAL_STORAGE, Permission.READ_EXTERNAL_STORAGE])
             log_dir = "/sdcard/stream_app_logs"
             if not os.path.exists(log_dir):
                 os.makedirs(log_dir)
-
             with open(os.path.join(log_dir, "error.log"), "a") as f:
                 f.write(error_msg + "\n")
+
+    def close_native_video(self, native_video):
+        try:
+            # Remove the native VideoView from the view hierarchy
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            activity = PythonActivity.mActivity
+            parent = native_video.getParent()
+            if parent:
+                parent.removeView(native_video)
+            if self.video_popup:
+                self.video_popup.dismiss()
+                self.video_popup = None
+        except Exception as e:
+            print("Error closing native video:", e)
 
 
 class MyApp(App):
     def build(self):
         sm = ScreenManager()
-        sm.add_widget(Setup(name='setup'))
-        sm.add_widget(ImageButtonScreen(name='image_button'))
+
+        # Only go through Setup if "User_data.txt" is empty or does not exist.
+        if os.path.exists("User_data.txt") and os.path.getsize("User_data.txt") > 0:
+            sm.add_widget(ImageButtonScreen(name='image_button'))
+        else:
+            sm.add_widget(Setup(name='setup'))
+
         sm.add_widget(MyGrid(name='grid'))
-        try:
-            with open("User_data.txt", "r") as file:
-                if file.read().strip():
-                    sm.current = 'image_button'
-                else:
-                    sm.current = 'setup'
-        except FileNotFoundError:
-            sm.current = 'setup'
         return sm
 
 
