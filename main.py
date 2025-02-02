@@ -1,13 +1,11 @@
 # MUST BE AT VERY TOP
 from kivy.config import Config
-
 Config.set('kivy', 'video', 'ffpyplayer')
 Config.set('kivy', 'log_enable', '1')
 Config.set('kivy', 'log_level', 'debug')
 
 import random
 import os
-import traceback
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
@@ -20,7 +18,6 @@ from kivy.graphics import Rectangle
 from kivy.animation import Animation
 from kivy.clock import Clock, mainthread
 from jnius import autoclass
-
 
 class ImageButton(Button):
     def __init__(self, source, **kwargs):
@@ -36,7 +33,6 @@ class ImageButton(Button):
     def update_rect(self, *args):
         self.rect.pos = self.pos
         self.rect.size = self.size
-
 
 class Setup(Screen):
     def __init__(self, **kwargs):
@@ -80,7 +76,6 @@ class Setup(Screen):
         popup = Popup(title=title, content=content, size_hint=(0.6, 0.4), auto_dismiss=False)
         close_button.bind(on_release=popup.dismiss)
         popup.open()
-
 
 class ImageButtonScreen(Screen):
     def __init__(self, **kwargs):
@@ -131,7 +126,6 @@ class ImageButtonScreen(Screen):
     def set_background_and_transition(self, instance):
         MyGrid.background_image = instance.source
         self.manager.current = 'grid'
-
 
 class MyGrid(Screen):
     background_image = None
@@ -189,33 +183,21 @@ class MyGrid(Screen):
     @mainthread
     def play_stream(self, url):
         try:
-            # Use Android's native video player (ExoPlayer)
+            # Use Android's native video player
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             Intent = autoclass('android.content.Intent')
             Uri = autoclass('android.net.Uri')
-
+            
             intent = Intent()
             intent.setAction(Intent.ACTION_VIEW)
             intent.setDataAndType(Uri.parse(url), "video/*")
-            intent.setPackage("com.google.android.exoplayer2.demo")  # ExoPlayer package name
-
+            
             current_activity = PythonActivity.mActivity
             current_activity.startActivity(intent)
 
         except Exception as e:
-            error_msg = f"ANDROID ERROR: {str(e)}\n{traceback.format_exc()}"
+            error_msg = f"ERROR: {str(e)}"
             print(error_msg)
-            # Write to external storage for debugging
-            from android.permissions import request_permissions, Permission
-            request_permissions([Permission.WRITE_EXTERNAL_STORAGE])
-
-            log_dir = "/sdcard/stream_app_logs"
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir)
-
-            with open(os.path.join(log_dir, "error.log"), "a") as f:
-                f.write(error_msg + "\n")
-
 
 class MyApp(App):
     def build(self):
@@ -232,7 +214,6 @@ class MyApp(App):
         except FileNotFoundError:
             sm.current = 'setup'
         return sm
-
 
 if __name__ == "__main__":
     MyApp().run()
