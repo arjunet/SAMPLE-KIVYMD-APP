@@ -118,7 +118,7 @@ class ImageButtonScreen(Screen):
 
     def show_theme_popup(self):
         content = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        message_label = Label(text="Please select a theme below to proceed:")
+        message_label = Label(text="Please select a theme below")
         close_button = Button(text="OK", size_hint=(1, 0.5))
         content.add_widget(message_label)
         content.add_widget(close_button)
@@ -249,7 +249,7 @@ class MyGrid(Screen):
             print(error_msg)
             # Write to external storage for debugging
             from android.permissions import request_permissions, Permission
-            request_permissions([Permission.WRITE_EXTERNAL_STORAGE, Permission.READ_EXTERNAL_STORAGE])
+            request_permissions([Permission.WRITE_EXTERNAL_STORAGE])
             log_dir = "/sdcard/stream_app_logs"
             if not os.path.exists(log_dir):
                 os.makedirs(log_dir)
@@ -274,14 +274,17 @@ class MyGrid(Screen):
 class MyApp(App):
     def build(self):
         sm = ScreenManager()
-
-        # Only go through Setup if "User_data.txt" is empty or does not exist.
-        if os.path.exists("User_data.txt") and os.path.getsize("User_data.txt") > 0:
-            sm.add_widget(ImageButtonScreen(name='image_button'))
-        else:
-            sm.add_widget(Setup(name='setup'))
-
+        sm.add_widget(Setup(name='setup'))
+        sm.add_widget(ImageButtonScreen(name='image_button'))
         sm.add_widget(MyGrid(name='grid'))
+        try:
+            with open("User_data.txt", "r") as file:
+                if file.read().strip():
+                    sm.current = 'image_button'
+                else:
+                    sm.current = 'setup'
+        except FileNotFoundError:
+            sm.current = 'setup'
         return sm
 
 
