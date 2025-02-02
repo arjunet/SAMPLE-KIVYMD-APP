@@ -1,10 +1,10 @@
 # MUST BE AT VERY TOP
 from kivy.config import Config
-from kivy.utils import platform  # Added platform detection
-Config.set('kivy', 'video', 'android')  # Use ExoPlayer on Android
+
+Config.set('kivy', 'video', 'ffpyplayer')
 Config.set('kivy', 'log_enable', '1')
 Config.set('kivy', 'log_level', 'debug')
-import jnius
+
 import random
 import os
 import traceback
@@ -14,12 +14,12 @@ from kivy.uix.label import Label
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
-from kivy.uix.video import Video
 from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.graphics import Rectangle
 from kivy.animation import Animation
 from kivy.clock import Clock, mainthread
+from jnius import autoclass
 
 
 class ImageButton(Button):
@@ -139,7 +139,6 @@ class MyGrid(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.layout = GridLayout(cols=2)
-        self.video_popup = None
 
         # Channel buttons
         channels = [
@@ -152,7 +151,6 @@ class MyGrid(Screen):
                          background_color=(0, 0, 0, 0),
                          color=(0, 0, 0, 1),
                          bold=True)
-
             btn.bind(on_press=self.play_channel)
             self.layout.add_widget(btn)
 
@@ -191,48 +189,18 @@ class MyGrid(Screen):
     @mainthread
     def play_stream(self, url):
         try:
-            # Cleanup previous instances
-            if self.video_popup:
-                self.video_popup.dismiss()
-                self.video_popup = None
+            # Use Android's native video player (ExoPlayer)
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
 
-            # Android-specific options adjustment
-            options = {} if platform == 'android' else {'eos': 'loop'}
+            intent = Intent()
+            intent.setAction(Intent.ACTION_VIEW)
+            intent.setDataAndType(Uri.parse(url), "video/*")
+            intent.setPackage("com.google.android.exoplayer2.demo")  # ExoPlayer package name
 
-            # Create video widget
-            video = Video(
-                source=url,
-                state='play',
-                options=options,
-                allow_stretch=True
-            )
-
-            # Android-friendly fullscreen implementation
-            content = BoxLayout()
-            content.add_widget(video)
-
-            # Add close button
-            close_btn = Button(
-                text='X',
-                size_hint=(None, None),
-                size=(50, 50),
-                pos_hint={'right': 0.95, 'top': 0.95},
-                background_color=(1, 0, 0, 1)
-            )
-
-            self.video_popup = Popup(
-                title='',
-                content=content,
-                size_hint=(1, 1),
-                auto_dismiss=False,
-                separator_height=0
-            )
-
-            close_btn.bind(on_release=self.video_popup.dismiss)
-            content.add_widget(close_btn)
-
-            # Start video after popup opens
-            self.video_popup.open()
+            current_activity = PythonActivity.mActivity
+            current_activity.startActivity(intent)
 
         except Exception as e:
             error_msg = f"ANDROID ERROR: {str(e)}\n{traceback.format_exc()}"
