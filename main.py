@@ -1,16 +1,10 @@
 # MUST BE AT VERY TOP
 from kivy.config import Config
 from kivy.utils import platform  # Added platform detection
-
-# Conditionally set video provider based on platform
-if platform == 'android':
-    Config.set('kivy', 'video', 'android')  # Use ExoPlayer on Android
-else:
-    Config.set('kivy', 'video', 'ffpyplayer')  # Keep ffpyplayer for other platforms
-
+Config.set('kivy', 'video', 'android')  # Use ExoPlayer on Android
 Config.set('kivy', 'log_enable', '1')
 Config.set('kivy', 'log_level', 'debug')
-
+import jnius
 import random
 import os
 import traceback
