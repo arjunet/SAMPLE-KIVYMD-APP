@@ -6,18 +6,20 @@ Config.set('kivy', 'log_level', 'debug')
 
 import random
 import os
+import traceback
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
+from kivy.uix.video import Video
 from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.graphics import Rectangle
 from kivy.animation import Animation
 from kivy.clock import Clock, mainthread
-from jnius import autoclass
+from kivy.core.window import Window
 
 class ImageButton(Button):
     def __init__(self, source, **kwargs):
@@ -80,9 +82,10 @@ class Setup(Screen):
 class ImageButtonScreen(Screen):
     def __init__(self, **kwargs):
         super(ImageButtonScreen, self).__init__(**kwargs)
-        main_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
-
-        mode_row = BoxLayout(orientation='horizontal', spacing=10)
+        self.main_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        self.mode_row = BoxLayout(orientation='horizontal', spacing=10)
+        self.buttons = []
+        self.current_focus = 0
 
         modes = [
             ('Galaxy Mode', 'nebula.jpg'),
@@ -101,10 +104,41 @@ class ImageButtonScreen(Screen):
                 size_hint=(1, 1)
             )
             btn.bind(on_press=self.set_background_and_transition)
-            mode_row.add_widget(btn)
+            self.mode_row.add_widget(btn)
+            self.buttons.append(btn)
 
-        main_layout.add_widget(mode_row)
-        self.add_widget(main_layout)
+        self.main_layout.add_widget(self.mode_row)
+        self.add_widget(self.main_layout)
+
+        self._keyboard = Window.request_keyboard(self._keyboard_closed, self)
+        self._keyboard.bind(on_key_down=self._on_keyboard_down)
+        
+        self.highlight_button(0)
+
+    def _keyboard_closed(self):
+        self._keyboard.unbind(on_key_down=self._on_keyboard_down)
+        self._keyboard = None
+
+    def _on_keyboard_down(self, keyboard, keycode, text, modifiers):
+        if keycode[1] == 'left':
+            self.move_focus(-1)
+        elif keycode[1] == 'right':
+            self.move_focus(1)
+        elif keycode[1] == 'enter':
+            self.buttons[self.current_focus].trigger_action()
+        return True
+
+    def move_focus(self, direction):
+        new_focus = (self.current_focus + direction) % len(self.buttons)
+        self.highlight_button(new_focus)
+
+    def highlight_button(self, index):
+        for i, btn in enumerate(self.buttons):
+            if i == index:
+                btn.background_color = (1, 0, 0, 1)  # Red highlight
+            else:
+                btn.background_color = (1, 1, 1, 0)  # Transparent
+        self.current_focus = index
 
     def on_enter(self):
         self.show_theme_popup()
@@ -133,8 +167,10 @@ class MyGrid(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.layout = GridLayout(cols=2)
+        self.video_popup = None
+        self.buttons = []
+        self.current_focus = 0
 
-        # Channel buttons
         channels = [
             "Florida ABC", "Florida CBS",
             "New York ABC", "New York CBS"
@@ -147,8 +183,43 @@ class MyGrid(Screen):
                          bold=True)
             btn.bind(on_press=self.play_channel)
             self.layout.add_widget(btn)
+            self.buttons.append(btn)
 
         self.add_widget(self.layout)
+        
+        self._keyboard = Window.request_keyboard(self._keyboard_closed, self)
+        self._keyboard.bind(on_key_down=self._on_keyboard_down)
+        
+        self.highlight_button(0)
+
+    def _keyboard_closed(self):
+        self._keyboard.unbind(on_key_down=self._on_keyboard_down)
+        self._keyboard = None
+
+    def _on_keyboard_down(self, keyboard, keycode, text, modifiers):
+        if keycode[1] == 'up':
+            self.move_focus(-2)
+        elif keycode[1] == 'down':
+            self.move_focus(2)
+        elif keycode[1] == 'left':
+            self.move_focus(-1)
+        elif keycode[1] == 'right':
+            self.move_focus(1)
+        elif keycode[1] == 'enter':
+            self.buttons[self.current_focus].trigger_action()
+        return True
+
+    def move_focus(self, direction):
+        new_focus = (self.current_focus + direction) % len(self.buttons)
+        self.highlight_button(new_focus)
+
+    def highlight_button(self, index):
+        for i, btn in enumerate(self.buttons):
+            if i == index:
+                btn.background_color = (1, 0, 0, 1)  # Red highlight
+            else:
+                btn.background_color = (0, 0, 0, 0)  # Transparent
+        self.current_focus = index
 
     def on_pre_enter(self):
         with self.layout.canvas.before:
@@ -183,21 +254,59 @@ class MyGrid(Screen):
     @mainthread
     def play_stream(self, url):
         try:
-            # Use Android's native video player
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            
-            intent = Intent()
-            intent.setAction(Intent.ACTION_VIEW)
-            intent.setDataAndType(Uri.parse(url), "video/*")
-            
-            current_activity = PythonActivity.mActivity
-            current_activity.startActivity(intent)
+            # Cleanup previous instances
+            if self.video_popup:
+                self.video_popup.dismiss()
+                self.video_popup = None
+
+            # Create video widget
+            video = Video(
+                source=url,
+                state='play',
+                options={'eos': 'loop'},
+                allow_stretch=True
+            )
+
+            # Android-friendly fullscreen implementation
+            content = BoxLayout()
+            content.add_widget(video)
+
+            # Add close button
+            close_btn = Button(
+                text='X',
+                size_hint=(None, None),
+                size=(50, 50),
+                pos_hint={'right': 0.95, 'top': 0.95},
+                background_color=(1, 0, 0, 1)
+            )
+
+            self.video_popup = Popup(
+                title='',
+                content=content,
+                size_hint=(1, 1),
+                auto_dismiss=False,
+                separator_height=0
+            )
+
+            close_btn.bind(on_release=self.video_popup.dismiss)
+            content.add_widget(close_btn)
+
+            # Start video after popup opens
+            self.video_popup.open()
 
         except Exception as e:
-            error_msg = f"ERROR: {str(e)}"
+            error_msg = f"ANDROID ERROR: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
+            # Write to external storage for debugging
+            from android.permissions import request_permissions, Permission
+            request_permissions([Permission.WRITE_EXTERNAL_STORAGE])
+
+            log_dir = "/sdcard/stream_app_logs"
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+
+            with open(os.path.join(log_dir, "error.log"), "a") as f:
+                f.write(error_msg + "\n")
 
 class MyApp(App):
     def build(self):
