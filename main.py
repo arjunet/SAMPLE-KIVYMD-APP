@@ -197,7 +197,7 @@ class MyGrid(Screen):
                 self.video_popup.dismiss()
                 self.video_popup = None
 
-            # --- BEGIN MODIFICATION: Use Android's native VideoView ---
+            # --- BEGIN MODIFICATION: Use Android's native VideoView with auto-fullscreen ---
             # Access native Android classes
             VideoView = autoclass('android.widget.VideoView')
             Uri = autoclass('android.net.Uri')
@@ -209,6 +209,13 @@ class MyGrid(Screen):
             video_uri = Uri.parse(url)
             native_video.setVideoURI(video_uri)
             native_video.requestFocus()
+
+            # Force full screen by hiding system UI elements
+            View = autoclass('android.view.View')
+            native_video.setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN |
+                                               View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                                               View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
+
             native_video.start()
 
             # Add the native VideoView to the activity's view hierarchy in full screen
