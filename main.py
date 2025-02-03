@@ -15,12 +15,44 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import ScreenManager, Screen
-from kivy.graphics import Rectangle
+from kivy.graphics import Rectangle, Color
 from kivy.animation import Animation
 from kivy.clock import Clock, mainthread
 from jnius import autoclass
-from kivy.core.window import Window  # ADDED
-from kivy.logger import Logger  # ADDED
+from kivy.core.window import Window
+from kivy.logger import Logger
+
+
+class FocusableChannelButton(Button):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_normal = ''
+        self.background_color = (0, 0, 0, 0)
+        self.default_text_color = (0, 0, 0, 1)
+        self.focus_color = (1, 0.5, 0, 0.3)  # Orange highlight
+        self.color = self.default_text_color
+
+        with self.canvas.after:
+            Color(*self.focus_color)
+            self.focus_rect = Rectangle(
+                pos=(self.x - 5, self.y - 5),
+                size=(self.width + 10, self.height + 10),
+                opacity=0
+            )
+
+        self.bind(
+            pos=self.update_focus_rect,
+            size=self.update_focus_rect,
+            focus=self.on_focus
+        )
+
+    def update_focus_rect(self, *args):
+        self.focus_rect.pos = (self.x - 5, self.y - 5)
+        self.focus_rect.size = (self.width + 10, self.height + 10)
+
+    def on_focus(self, instance, value):
+        self.focus_rect.opacity = 1 if value else 0
+        self.background_color = (1, 0.5, 0, 0.2) if value else (0, 0, 0, 0)
 
 
 class ImageButton(Button):
@@ -141,21 +173,34 @@ class MyGrid(Screen):
         super().__init__(**kwargs)
         self.layout = GridLayout(cols=2)
 
-        # Channel buttons
         channels = [
             "Florida ABC", "Florida CBS",
             "New York ABC", "New York CBS"
         ]
 
+        self.buttons = []
         for channel in channels:
-            btn = Button(text=channel, font_size=60,
-                         background_color=(0, 0, 0, 0),
-                         color=(0, 0, 0, 1),
-                         bold=True)
+            btn = FocusableChannelButton(
+                text=channel,
+                font_size=60,
+                color=(0, 0, 0, 1),
+                bold=True
+            )
             btn.bind(on_press=self.play_channel)
             self.layout.add_widget(btn)
+            self.buttons.append(btn)
+
+        # Set focus navigation
+        for i, btn in enumerate(self.buttons):
+            btn.focus_next = {
+                'up': self.buttons[i - 2] if i >= 2 else None,
+                'down': self.buttons[i + 2] if i < len(self.buttons) - 2 else None,
+                'left': self.buttons[i - 1] if i % 2 != 0 else None,
+                'right': self.buttons[i + 1] if i % 2 == 0 else None
+            }
 
         self.add_widget(self.layout)
+        self.buttons[0].focus = True
 
     def on_pre_enter(self):
         with self.layout.canvas.before:
@@ -190,7 +235,6 @@ class MyGrid(Screen):
     @mainthread
     def play_stream(self, url):
         try:
-            # Use Android's native video player
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             Intent = autoclass('android.content.Intent')
             Uri = autoclass('android.net.Uri')
@@ -209,75 +253,65 @@ class MyGrid(Screen):
 
 class MyApp(App):
     def build(self):
-        sm = ScreenManager()
-        sm.add_widget(Setup(name='setup'))
-        sm.add_widget(ImageButtonScreen(name='image_button'))
-        sm.add_widget(MyGrid(name='grid'))
+        self.sm = ScreenManager()
+        self.sm.add_widget(Setup(name='setup'))
+        self.sm.add_widget(ImageButtonScreen(name='image_button'))
+        self.sm.add_widget(MyGrid(name='grid'))
+
         try:
             with open("User_data.txt", "r") as file:
-                if file.read().strip():
-                    sm.current = 'image_button'
-                else:
-                    sm.current = 'setup'
+                self.sm.current = 'image_button' if file.read().strip() else 'setup'
         except FileNotFoundError:
-            sm.current = 'setup'
-            
-        # Add ADB control binding
-        Window.bind(on_keyboard=self.on_keyboard)
-        return sm
+            self.sm.current = 'setup'
 
-    # NEW ADB CONTROL METHODS (ONLY ADDED CODE)
+        Window.bind(on_keyboard=self.on_keyboard)
+        return self.sm
+
     def on_keyboard(self, window, key, *args):
-        Logger.info(f"Key pressed: {key}")
-        key_actions = {
-            19: self.move_focus_up,
-            20: self.move_focus_down,
-            21: self.move_focus_left,
-            22: self.move_focus_right,
-            23: self.press_focused,
-            4: self.go_back
-        }
-        if key in key_actions:
-            key_actions[key]()
+        KEY_UP = 19
+        KEY_DOWN = 20
+        KEY_LEFT = 21
+        KEY_RIGHT = 22
+        KEY_ENTER = 23
+        KEY_BACK = 4
+
+        if key == KEY_BACK:
+            self.handle_back()
             return True
+
+        current = Window.focus_widget
+        if not current:
+            return False
+
+        if key == KEY_ENTER:
+            current.trigger_action(0.1)
+            return True
+
+        direction_map = {
+            KEY_UP: 'up',
+            KEY_DOWN: 'down',
+            KEY_LEFT: 'left',
+            KEY_RIGHT: 'right'
+        }
+
+        if key in direction_map:
+            direction = direction_map[key]
+            next_widget = getattr(current.focus_next, direction, None)
+            if next_widget:
+                current.focus = False
+                next_widget.focus = True
+                Window.focus_widget = next_widget
+                return True
+
         return False
 
-    def move_focus_up(self):
-        current = Window.focus_widget
-        if current and current.focus_previous:
-            current.focus_previous.focus = True
-
-    def move_focus_down(self):
-        current = Window.focus_widget
-        if current and current.focus_next:
-            current.focus_next.focus = True
-
-    def move_focus_left(self):
-        current = Window.focus_widget
-        if current and hasattr(current.parent, 'children'):
-            idx = current.parent.children.index(current)
-            if idx < len(current.parent.children) - 1:
-                current.parent.children[idx + 1].focus = True
-
-    def move_focus_right(self):
-        current = Window.focus_widget
-        if current and hasattr(current.parent, 'children'):
-            idx = current.parent.children.index(current)
-            if idx > 0:
-                current.parent.children[idx - 1].focus = True
-
-    def press_focused(self):
-        current = Window.focus_widget
-        if current and hasattr(current, 'trigger_action'):
-            current.trigger_action(0.1)
-
-    def go_back(self):
-        if self.root.current == 'image_button':
-            self.root.current = 'setup'
-        elif self.root.current == 'grid':
-            self.root.current = 'image_button'
+    def handle_back(self):
+        if self.sm.current == 'image_button':
+            self.sm.current = 'setup'
+        elif self.sm.current == 'grid':
+            self.sm.current = 'image_button'
         else:
-            self.root.current = 'setup'
+            self.sm.current = 'setup'
 
 
 if __name__ == "__main__":
